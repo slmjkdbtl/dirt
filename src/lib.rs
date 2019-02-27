@@ -9,13 +9,17 @@ use std::collections::HashMap;
 
 use std::str::FromStr;
 
+type Pixels = Vec<u8>;
+type Palette = HashMap<char, Color>;
+
 #[derive(Debug, Clone)]
 pub struct Dirt {
 
 	pub anims: HashMap<String, Anim>,
-	pub size: (u32, u32),
 	pub frames: Vec<Quad>,
-	pub pixels: Vec<u8>,
+	pub pixels: Pixels,
+	pub width: u32,
+	pub height: u32,
 
 }
 
@@ -49,6 +53,15 @@ impl Color {
 			b: (hex & 0xff) as u8,
 			a: 255,
 		};
+
+	}
+
+	fn append(&self, pixels: &mut Pixels) {
+
+		pixels.push(self.r);
+		pixels.push(self.g);
+		pixels.push(self.b);
+		pixels.push(self.a);
 
 	}
 
@@ -129,42 +142,64 @@ impl Dirt {
 		}
 
 		let mut pixels = Vec::new();
-		let o = Color::from_hex(0xffffff, 0);
 
 		for f in images {
-
-			for line in f {
-
-				for ch in line.chars() {
-
-					let color;
-
-					if ch == '.' {
-						color = &o;
-					} else {
-						if let Some(c) = colors.get(&ch) {
-							color = c;
-						} else {
-							return Err(Error::Parse(format!("cannot find color {}", ch)));
-						}
-					}
-
-				}
-
-			}
-
+			append_frame(&mut pixels, &colors, &f)?;
 		}
 
 		return Ok(Self {
 
 			anims: anims,
-			size: (0, 0),
 			frames: frames,
 			pixels: pixels,
+			width: 33,
+			height: 11,
 
 		});
 
 	}
+
+	pub fn save_png(&self, fname: &str) {
+
+		image::save_buffer(
+			fname,
+			&self.pixels,
+			self.width,
+			self.height,
+			image::ColorType::RGBA(8),
+		).expect("failed to save png");
+
+	}
+
+}
+
+fn append_frame(pixels: &mut Pixels, palette: &Palette, frame: &Frame) -> Result<(), Error> {
+
+	let o = Color::from_hex(0x000000, 0);
+
+	for line in frame {
+
+		for ch in line.chars() {
+
+			let color;
+
+			if ch == '.' {
+				color = &o;
+			} else {
+				if let Some(c) = palette.get(&ch) {
+					color = c;
+				} else {
+					return Err(Error::Parse(format!("cannot find color {}", ch)));
+				}
+			}
+
+			color.append(pixels);
+
+		}
+
+	}
+
+	return Ok(());
 
 }
 
