@@ -24,11 +24,15 @@ pub struct Anim {
 impl Dirt {
 
 	pub fn from_file(fname: &str) -> Self {
-		unimplemented!();
+		return Self::from_str("");
 	}
 
 	pub fn from_str(code: &str) -> Self {
-		unimplemented!();
+		return Self {
+			anims: HashMap::new(),
+			colors: HashMap::new(),
+			frames: Vec::new(),
+		}
 	}
 
 }

@@ -1,4 +1,5 @@
-# wengwengweng
+dirt
+a sprite format
 
 [idle] 1<->2
 [attack] 3->2
@@ -52,4 +53,5 @@ rrrrmmmrrrr
 .rrrrrrrrr.
 ...r.r.r...
 ==========
+
 
