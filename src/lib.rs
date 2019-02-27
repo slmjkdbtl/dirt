@@ -76,10 +76,6 @@ pub enum Error {
 
 impl Dirt {
 
-	pub fn from_file(fname: &str) -> Self {
-		unimplemented!()
-	}
-
 	pub fn from_str(code: &'static str) -> Result<Self, Error> {
 
 		let statements = all().parse(code.as_bytes()).expect("failed to parse");

@@ -3,7 +3,7 @@
 [idle] 1<->2
 [attack] 3->2
 
-r: 00ffff
+r:00ffff
 R: ff00ff
 M: ff00ff
 m: ffff00
