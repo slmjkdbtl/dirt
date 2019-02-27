@@ -13,10 +13,18 @@ use std::str::FromStr;
 pub struct Dirt {
 
 	pub anims: HashMap<String, Anim>,
-	pub colors: HashMap<String, Color>,
-	pub frames: Vec<Frame>,
-	pub size: (u32, u32)
+	pub size: (u32, u32),
+	pub frames: Vec<Quad>,
+	pub pixels: Vec<u8>,
 
+}
+
+#[derive(Debug, Clone)]
+pub struct Quad {
+	pub x: u32,
+	pub y: u32,
+	pub w: u32,
+	pub h: u32,
 }
 
 type Frame = Vec<String>;
@@ -58,7 +66,7 @@ enum Statement {
 
 	Comment,
 	Anim(String, Anim),
-	Color(String, Color),
+	Color(char, Color),
 	Frame(u32, Frame),
 
 }
@@ -82,6 +90,7 @@ impl Dirt {
 
 		let mut anims = HashMap::new();
 		let mut colors = HashMap::new();
+		let mut images = Vec::new();
 		let mut frames = Vec::new();
 		let mut cur_frame = 0;
 
@@ -92,18 +101,24 @@ impl Dirt {
 				Statement::Anim(name, anim) => {
 					anims.insert(name, anim);
 				}
+
 				Statement::Color(ch, color) => {
 					colors.insert(ch, color);
 				}
-				Statement::Frame(n, s) => {
+
+				Statement::Frame(n, f) => {
 
 					cur_frame += 1;
 
 					if (n != cur_frame) {
-						return Err(Error::Parse("frames need to be in order".to_owned()));
+						return Err(Error::Parse(format!("frames need to be in order")));
 					}
 
-					frames.push(s);
+					if (f.len() == 0) {
+						return Err(Error::Parse(format!("nothing in frame {}", n)))
+					}
+
+					images.push(f);
 
 				}
 
@@ -113,12 +128,39 @@ impl Dirt {
 
 		}
 
+		let mut pixels = Vec::new();
+		let o = Color::from_hex(0xffffff, 0);
+
+		for f in images {
+
+			for line in f {
+
+				for ch in line.chars() {
+
+					let color;
+
+					if ch == '.' {
+						color = &o;
+					} else {
+						if let Some(c) = colors.get(&ch) {
+							color = c;
+						} else {
+							return Err(Error::Parse(format!("cannot find color {}", ch)));
+						}
+					}
+
+				}
+
+			}
+
+		}
+
 		return Ok(Self {
 
 			anims: anims,
-			colors: colors,
-			frames: frames,
 			size: (0, 0),
+			frames: frames,
+			pixels: pixels,
 
 		});
 
@@ -127,7 +169,7 @@ impl Dirt {
 }
 
 fn space() -> Parser<u8, ()> {
-	return sym(b' ').discard();
+	return sym(b' ').opt().discard();
 }
 
 fn line() -> Parser<u8, ()> {
@@ -199,7 +241,7 @@ fn frame() -> Parser<u8, Statement> {
 fn color() -> Parser<u8, Statement> {
 
 	let rule =
-		is_a(alphanum).repeat(1).convert(String::from_utf8)
+		is_a(alphanum).repeat(1).convert(String::from_utf8).map(|s| s.chars().next().unwrap())
 		- sym(b':')
 		- space()
 		+ is_a(hex_digit)
