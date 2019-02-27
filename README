@@ -1,5 +1,5 @@
-dirt
-a sprite format
+# dirt
+# a sprite & animation file format
 
 [idle] 1<->2
 [attack] 3->2
