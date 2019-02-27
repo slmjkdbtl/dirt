@@ -1,0 +1,14 @@
+# wengwengweng
+
+[package]
+name = "dirt"
+description = "a sprite format for games"
+version = "0.0.0"
+authors = ["t <voygagaga@outlook.com>"]
+repository = "https://github.com/slmjkdbtl/dirt"
+license = "Zlib"
+edition = "2018"
+readme = "README.md"
+
+[dependencies]
+
