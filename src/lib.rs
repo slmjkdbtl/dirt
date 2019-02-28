@@ -9,29 +9,24 @@ use std::collections::HashMap;
 
 use std::str::FromStr;
 
-type Pixels = Vec<u8>;
-type Palette = HashMap<char, Color>;
-
 #[derive(Debug, Clone)]
 pub struct Dirt {
 
 	pub anims: HashMap<String, Anim>,
-	pub frames: Vec<Quad>,
-	pub pixels: Pixels,
-	pub width: u32,
-	pub height: u32,
+	pub framelist: Vec<Quad>,
+	pub image_data: ImageData,
 
 }
 
 #[derive(Debug, Clone)]
 pub struct Quad {
+
 	pub x: u32,
 	pub y: u32,
 	pub w: u32,
 	pub h: u32,
-}
 
-type Frame = Vec<String>;
+}
 
 #[derive(Debug, Clone)]
 pub struct Color {
@@ -51,12 +46,12 @@ impl Color {
 			r: (hex >> 16) as u8,
 			g: ((hex >> 8) & 0xff) as u8,
 			b: (hex & 0xff) as u8,
-			a: 255,
+			a: opacity,
 		};
 
 	}
 
-	fn append(&self, pixels: &mut Pixels) {
+	fn append(&self, pixels: &mut Vec<u8>) {
 
 		pixels.push(self.r);
 		pixels.push(self.g);
@@ -80,13 +75,14 @@ enum Statement {
 	Comment,
 	Anim(String, Anim),
 	Color(char, Color),
-	Frame(u32, Frame),
+	Frame(u32, Vec<String>),
 
 }
 
 #[derive(Debug)]
 pub enum Error {
 	Parse(String),
+	Io(std::io::Error),
 }
 
 // impl From<pom::result::Error> for Error {
@@ -94,6 +90,175 @@ pub enum Error {
 // 		return Error::Parse("parsing error".to_owned());
 // 	}
 // }
+
+impl From<std::io::Error> for Error {
+	fn from(err: std::io::Error) -> Error {
+		return Error::Io(err);
+	}
+}
+
+enum Layout {
+
+	Horizontal,
+	Vertical,
+
+}
+
+struct CharFrame {
+	data: Vec<String>,
+	width: u32,
+	height: u32,
+}
+
+impl CharFrame {
+
+	fn new(data: Vec<String>) -> Result<Self, Error> {
+
+		let h = data.len() as u32;
+
+		if h == 0 {
+			return Err(Error::Parse(format!("failed to parse frame")));
+		}
+
+		let w = data[0].len() as u32;
+
+		if w == 0 {
+			return Err(Error::Parse(format!("failed to parse frame")));
+		} else {
+			return Ok(Self {
+				data: data,
+				width: w,
+				height: h,
+			});
+		}
+
+	}
+
+}
+
+struct CharFramelist {
+
+	frames: Vec<CharFrame>,
+	palette: HashMap<char, Color>,
+
+}
+
+impl CharFramelist {
+
+	fn new(palette: HashMap<char, Color>) -> Self {
+		return Self {
+			frames: Vec::new(),
+			palette: palette,
+		};
+	}
+
+	fn add(&mut self, frame: CharFrame) -> Result<(), Error> {
+
+		let frames = &mut self.frames;
+
+		if frames.is_empty() {
+			return Ok(frames.push(frame));
+		}
+
+		if let Some(last) = frames.get(frames.len() - 1) {
+			if frame.width != last.width || frame.height != last.height {
+				return Err(Error::Parse(format!("failed to parse frames")));
+			} else {
+				return Ok((frames.push(frame)));
+			}
+		} else {
+			return Err(Error::Parse(format!("failed to parse")))
+		}
+
+	}
+
+	fn size(&self) -> Option<(u32, u32)> {
+		if let Some(frame) = self.frames.get(0) {
+			return Some((frame.width, frame.height));
+		} else {
+			return None;
+		}
+	}
+
+	fn to_pixels(&self, layout: Layout) -> Result<(ImageData, Vec<Quad>), Error> {
+
+		let palette = &self.palette;
+		let nothing = Color::from_hex(0x000000, 0);
+		let mut pixel_frames = Vec::with_capacity(self.frames.len());
+
+		for frame in &self.frames {
+
+			let data = &frame.data;
+			let mut pixels = Vec::new();
+
+			for line in data {
+
+				for ch in line.chars() {
+
+					let color;
+
+					if ch == '.' {
+						color = &nothing;
+					} else {
+						if let Some(c) = palette.get(&ch) {
+							color = c;
+						} else {
+							return Err(Error::Parse(format!("cannot find color {}", ch)));
+						}
+					}
+
+					color.append(&mut pixels);
+
+				}
+
+			}
+
+			pixel_frames.push(pixels);
+
+		}
+
+		match layout {
+
+			Layout::Horizontal => {
+				unimplemented!();
+			},
+
+			Layout::Vertical => {
+				unimplemented!();
+			},
+
+		}
+
+		unimplemented!();
+
+	}
+
+}
+
+#[derive(Debug, Clone)]
+pub struct ImageData {
+	pub width: u32,
+	pub height: u32,
+	pub data: Vec<u8>
+}
+
+impl ImageData {
+
+	pub fn save_png(&self, fname: &str) -> Result<(), Error> {
+
+		image::save_buffer(
+			fname,
+			&self.data,
+			self.width,
+			self.height,
+			image::ColorType::RGBA(8),
+		)?;
+
+		return Ok(());
+
+	}
+
+}
 
 impl Dirt {
 
@@ -103,7 +268,6 @@ impl Dirt {
 
 		let mut anims = HashMap::new();
 		let mut palette = HashMap::new();
-		let mut images = Vec::new();
 		let mut frames = Vec::new();
 		let mut cur_frame = 0;
 
@@ -127,11 +291,7 @@ impl Dirt {
 						return Err(Error::Parse(format!("frames need to be in order")));
 					}
 
-					if (f.len() == 0) {
-						return Err(Error::Parse(format!("nothing in frame {}", n)))
-					}
-
-					images.push(f);
+					frames.push(CharFrame::new(f)?);
 
 				}
 
@@ -141,85 +301,19 @@ impl Dirt {
 
 		}
 
-		let mut pixels = Vec::new();
-		let mut size = None;
-		let o = Color::from_hex(0x000000, 0);
+		let mut char_framelist = CharFramelist::new(palette);
 
-		for (i, f) in images.iter().enumerate() {
-
-			if f.is_empty() {
-				return Err(Error::Parse(format!("invalid frame {}", i + 1)));
-			}
-
-			let h = f.len() as u32;
-			let w = f[0].len() as u32;
-
-			for line in f {
-
-				if line.len() as u32 != w {
-					return Err(Error::Parse(format!("invalid frame {}", i + 1)));
-				}
-
-				for ch in line.chars() {
-
-					let color;
-
-					if ch == '.' {
-						color = &o;
-					} else {
-						if let Some(c) = palette.get(&ch) {
-							color = c;
-						} else {
-							return Err(Error::Parse(format!("cannot find color {}", ch)));
-						}
-					}
-
-					color.append(&mut pixels);
-
-				}
-
-			}
-
-			frames.push(Quad {
-				x: i as u32 * w,
-				y: 0,
-				w: w,
-				h: h,
-			});
-
-			if let Some(s) = size {
-				if s != (w, h) {
-					return Err(Error::Parse(format!("invalid frame {}", i + 1)));
-				}
-			} else {
-				size = Some((w, h));
-			}
-
+		for f in frames {
+			char_framelist.add(f);
 		}
 
-		let size = size.unwrap();
+		let (image_data, framelist) = char_framelist.to_pixels(Layout::Horizontal)?;
 
 		return Ok(Self {
-
 			anims: anims,
-			frames: frames,
-			pixels: pixels,
-			width: size.0 as u32,
-			height: size.1 as u32,
-
+			image_data: image_data,
+			framelist: framelist,
 		});
-
-	}
-
-	pub fn save_png(&self, fname: &str) {
-
-		image::save_buffer(
-			fname,
-			&self.pixels,
-			self.width * self.frames.len() as u32,
-			self.height,
-			image::ColorType::RGBA(8),
-		).expect("failed to save png");
 
 	}
 

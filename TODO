@@ -1,10 +1,11 @@
 # wengwengweng
 
 == DOING
-- more robust parser
 
 == TODO
 - aseprite script
+- more robust parser
+- support custom frame layout
 
 == DONE
 - vim syntax
