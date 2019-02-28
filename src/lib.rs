@@ -102,7 +102,7 @@ impl Dirt {
 		let statements = all().parse(code.as_bytes()).expect("failed to parse");
 
 		let mut anims = HashMap::new();
-		let mut colors = HashMap::new();
+		let mut palette = HashMap::new();
 		let mut images = Vec::new();
 		let mut frames = Vec::new();
 		let mut cur_frame = 0;
@@ -116,7 +116,7 @@ impl Dirt {
 				}
 
 				Statement::Color(ch, color) => {
-					colors.insert(ch, color);
+					palette.insert(ch, color);
 				}
 
 				Statement::Frame(n, f) => {
@@ -142,18 +142,70 @@ impl Dirt {
 		}
 
 		let mut pixels = Vec::new();
+		let mut size = None;
+		let o = Color::from_hex(0x000000, 0);
 
-		for f in images {
-			append_frame(&mut pixels, &colors, &f)?;
+		for (i, f) in images.iter().enumerate() {
+
+			if f.is_empty() {
+				return Err(Error::Parse(format!("invalid frame {}", i + 1)));
+			}
+
+			let h = f.len() as u32;
+			let w = f[0].len() as u32;
+
+			for line in f {
+
+				if line.len() as u32 != w {
+					return Err(Error::Parse(format!("invalid frame {}", i + 1)));
+				}
+
+				for ch in line.chars() {
+
+					let color;
+
+					if ch == '.' {
+						color = &o;
+					} else {
+						if let Some(c) = palette.get(&ch) {
+							color = c;
+						} else {
+							return Err(Error::Parse(format!("cannot find color {}", ch)));
+						}
+					}
+
+					color.append(&mut pixels);
+
+				}
+
+			}
+
+			frames.push(Quad {
+				x: i as u32 * w,
+				y: 0,
+				w: w,
+				h: h,
+			});
+
+			if let Some(s) = size {
+				if s != (w, h) {
+					return Err(Error::Parse(format!("invalid frame {}", i + 1)));
+				}
+			} else {
+				size = Some((w, h));
+			}
+
 		}
+
+		let size = size.unwrap();
 
 		return Ok(Self {
 
 			anims: anims,
 			frames: frames,
 			pixels: pixels,
-			width: 33,
-			height: 11,
+			width: size.0 as u32,
+			height: size.1 as u32,
 
 		});
 
@@ -164,42 +216,12 @@ impl Dirt {
 		image::save_buffer(
 			fname,
 			&self.pixels,
-			self.width,
+			self.width * self.frames.len() as u32,
 			self.height,
 			image::ColorType::RGBA(8),
 		).expect("failed to save png");
 
 	}
-
-}
-
-fn append_frame(pixels: &mut Pixels, palette: &Palette, frame: &Frame) -> Result<(), Error> {
-
-	let o = Color::from_hex(0x000000, 0);
-
-	for line in frame {
-
-		for ch in line.chars() {
-
-			let color;
-
-			if ch == '.' {
-				color = &o;
-			} else {
-				if let Some(c) = palette.get(&ch) {
-					color = c;
-				} else {
-					return Err(Error::Parse(format!("cannot find color {}", ch)));
-				}
-			}
-
-			color.append(pixels);
-
-		}
-
-	}
-
-	return Ok(());
 
 }
 

@@ -9,4 +9,6 @@
 == DONE
 - vim syntax
 - parser
+- calculate frame quads
+- calculate width and height
 
